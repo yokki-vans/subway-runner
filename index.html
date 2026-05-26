@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Subway Runner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#0a0c12;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+
+#game-container{position:relative;width:100%;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#1a1c2e}
+#canvas-wrap{flex:1 1 0%;min-height:0;position:relative;overflow:hidden}
+#canvas-wrap canvas{display:block;width:100%!important;height:100%!important}
+
+/* HUD */
+#hud{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:20}
+#hud-score{font-size:clamp(20px,4vmin,36px);font-weight:800;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.6)}
+#hud-coins{display:flex;align-items:center;gap:6px;font-size:clamp(14px,2.8vmin,24px);font-weight:700;color:#ffdd44;text-shadow:0 2px 8px rgba(0,0,0,0.6)}
+
+/* Start overlay */
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,12,18,0.85);z-index:30;transition:opacity 0.5s}
+#overlay.hidden{opacity:0;pointer-events:none}
+#overlay h1{font-size:clamp(28px,6vmin,52px);font-weight:800;color:#ff6b35;text-shadow:0 0 30px rgba(255,107,53,0.4);margin-bottom:8px}
+#overlay p{color:#aab;font-size:clamp(14px,2.5vmin,20px);margin-bottom:24px}
+#overlay .sub{color:#667;font-size:clamp(11px,2vmin,14px);margin-top:16px}
+#start-btn{padding:14px 48px;border:none;border-radius:100px;font-size:clamp(16px,3vmin,24px);font-weight:700;background:linear-gradient(135deg,#ff6b35,#ff4500);color:#fff;cursor:pointer;box-shadow:0 4px 24px rgba(255,107,53,0.4);transition:transform 0.15s,box-shadow 0.15s;-webkit-tap-highlight-color:transparent}
+#start-btn:active{transform:scale(0.96)}
+#start-btn:hover{box-shadow:0 6px 32px rgba(255,107,53,0.6)}
+
+/* Game over */
+#gameover{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,12,18,0.88);z-index:30}
+#gameover.show{display:flex}
+#gameover h1{font-size:clamp(32px,7vmin,56px);font-weight:800;color:#ff3333;margin-bottom:4px}
+#gameover .final-score{font-size:clamp(18px,3.5vmin,28px);color:#fff;margin-bottom:4px}
+#gameover .final-coins{font-size:clamp(14px,2.5vmin,20px);color:#ffdd44;margin-bottom:20px}
+#restart-btn{padding:14px 48px;border:none;border-radius:100px;font-size:clamp(16px,3vmin,24px);font-weight:700;background:linear-gradient(135deg,#ff6b35,#ff4500);color:#fff;cursor:pointer;box-shadow:0 4px 24px rgba(255,107,53,0.4);transition:transform 0.15s;-webkit-tap-highlight-color:transparent}
+#restart-btn:active{transform:scale(0.96)}
+
+/* Tap zones */
+#tap-zones{position:absolute;left:0;right:0;top:0;bottom:calc(clamp(42px,9vmin,56px) + env(safe-area-inset-bottom,0px));display:none;z-index:10;pointer-events:none;touch-action:none}
+.tap-zone{flex:1 1 33.333%;pointer-events:auto;-webkit-tap-highlight-color:transparent;touch-action:none;position:relative}
+.tap-zone span{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);font-size:10px;color:rgba(255,255,255,0.15);text-transform:uppercase;letter-spacing:2px;font-weight:600;pointer-events:none}
+@media(pointer:coarse),(max-width:899px){#tap-zones{display:flex}}
+@media(hover:hover)and(pointer:fine)and(min-width:900px){#tap-zones{display:none!important}}
+
+/* Controls bar */
+#controls-bar{height:clamp(42px,9vmin,56px);background:rgba(20,22,34,0.95);border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-around;padding:0 8px;backdrop-filter:blur(8px)}
+#controls-bar button{background:rgba(255,255,255,0.08);border:none;border-radius:8px;color:#fff;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent;transition:background 0.1s}
+#controls-bar button:active{background:rgba(255,255,255,0.15)}
+#controls-bar .ctrl-icon{font-size:18px}
+@media(hover:hover)and(pointer:fine){#controls-bar{display:none}}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="canvas-wrap"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-score">0</div>
+    <div id="hud-coins"><span style="font-size:clamp(14px,3vmin,22px)">🪙</span> <span id="hud-coin-count">0</span></div>
+  </div>
+
+  <!-- Tap zones (mobile) -->
+  <div id="tap-zones">
+    <div class="tap-zone" id="zone-left"><span>◀</span></div>
+    <div class="tap-zone" id="zone-jump"><span>▲</span></div>
+    <div class="tap-zone" id="zone-right"><span>▶</span></div>
+  </div>
+
+  <!-- Start overlay -->
+  <div id="overlay">
+    <h1>🚇 Subway Runner</h1>
+    <p>Dodge trains • Collect coins • Run forever</p>
+    <button id="start-btn">▶ PLAY</button>
+    <div class="sub">← swipe left → &nbsp;·&nbsp; ↑ tap center to jump</div>
+  </div>
+
+  <!-- Game over -->
+  <div id="gameover">
+    <h1>GAME OVER</h1>
+    <div class="final-score">Score: <span id="final-score">0</span></div>
+    <div class="final-coins">🪙 <span id="final-coins">0</span></div>
+    <button id="restart-btn">▶ PLAY AGAIN</button>
+  </div>
+
+  <!-- Controls bar (desktop) -->
+  <div id="controls-bar">
+    <button id="btn-left"><span class="ctrl-icon">◀</span> Left</button>
+    <button id="btn-jump"><span class="ctrl-icon">▲</span> Jump</button>
+    <button id="btn-right"><span class="ctrl-icon">▶</span> Right</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+// CFG
+// ============================================================
+const CFG = {
+  // Track
+  LANE_WIDTH: 1.8,
+  SEGMENT_LENGTH: 12,
+  SEGMENTS_AHEAD: 90,
+  WALL_DISTANCE: 5.0,
+  WALL_HEIGHT: 7.5,
+  WALL_THICKNESS: 0.8,
+  PANEL_HEIGHT: 2.0,
+
+  // Curve
+  CURVE_FREQ: 0.035,
+  CURVE_AMP: 3.5,
+  CURVE_DETAIL_FREQ: 0.085,
+  CURVE_DETAIL_AMP: 1.2,
+  CURVE_Y_FREQ: 0.018,
+  CURVE_Y_AMP: 0.6,
+
+  // Player
+  PLAYER_SPEED: 14,
+  JUMP_VELOCITY: 11,
+  GRAVITY: -40,
+  SWITCH_SPEED: 12,
+
+  // Camera
+  CAMERA_HEIGHT: 5.2,
+  CAMERA_DISTANCE: 8.0,
+  CAMERA_PITCH: -0.32,
+
+  // World
+  TOTAL_BUILDINGS: 40,
+  BUILDING_DIST: 60,
+
+  // Gameplay
+  COIN_SPACING: 8,
+  OBSTACLE_SPACING: 14,
+  INITIAL_SAFE_DISTANCE: 40,
+};
+
+// ============================================================
+// State
+// ============================================================
+const state = {
+  running: false,
+  gameOver: false,
+  score: 0,
+  coins: 0,
+  playerZ: 0,
+  playerX: 0,
+  targetLane: 1, // 0=left, 1=center, 2=right
+  playerY: 0,
+  velocityY: 0,
+  isJumping: false,
+  nextGenerateZ: 0,
+  segments: [],
+  obstacles: [],
+  coinMeshes: [],
+  speed: CFG.PLAYER_SPEED,
+  buildings: [],
+};
+
+// ============================================================
+// Scene setup
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1c2e);
+scene.fog = new THREE.Fog(0x1a1c2e, 50, 120);
+
+const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 150);
+camera.position.set(0, CFG.CAMERA_HEIGHT, -CFG.CAMERA_DISTANCE);
+camera.lookAt(0, 0.8, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+// Resize
+function resize() {
+  const w = document.getElementById('canvas-wrap').clientWidth;
+  const h = document.getElementById('canvas-wrap').clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ============================================================
+// Lighting
+// ============================================================
+const hemi = new THREE.HemisphereLight(0xffeedd, 0x445566, 0.7);
+scene.add(hemi);
+
+const dirLight = new THREE.DirectionalLight(0xfff5e0, 1.3);
+dirLight.position.set(8, 16, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.near = 2;
+dirLight.shadow.camera.far = 80;
+dirLight.shadow.camera.left = -20;
+dirLight.shadow.camera.right = 20;
+dirLight.shadow.camera.top = 20;
+dirLight.shadow.camera.bottom = -20;
+scene.add(dirLight);
+
+const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+fillLight.position.set(-6, 8, 4);
+scene.add(fillLight);
+
+// ============================================================
+// Track curve functions
+// ============================================================
+function getTrackCurveX(z) {
+  return Math.sin(z * CFG.CURVE_FREQ) * CFG.CURVE_AMP
+       + Math.sin(z * CFG.CURVE_DETAIL_FREQ) * CFG.CURVE_DETAIL_AMP;
+}
+
+function getTrackCurveY(z) {
+  return Math.sin(z * CFG.CURVE_Y_FREQ) * CFG.CURVE_Y_AMP;
+}
+
+function getTrackCurveAngle(z) {
+  const dx = getTrackCurveX(z + 2) - getTrackCurveX(z - 2);
+  return Math.atan2(dx, 4) * 0.5;
+}
+
+function getLaneX(lane) {
+  return (lane - 1) * CFG.LANE_WIDTH;
+}
+
+// ============================================================
+// Materials
+// ============================================================
+const matRoad = new THREE.MeshStandardMaterial({ color: 0x3a3d4a, roughness: 0.7, metalness: 0.1 });
+const matRail = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.5, metalness: 0.4 });
+const matSleeper = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.9 });
+const matWall = new THREE.MeshStandardMaterial({ color: 0xe85d3a, roughness: 0.65 });
+const matWallDark = new THREE.MeshStandardMaterial({ color: 0xb8452a, roughness: 0.7 });
+const matFrame = new THREE.MeshStandardMaterial({ color: 0x6a4e3c, roughness: 0.4, metalness: 0.35 });
+const matRoof = new THREE.MeshStandardMaterial({ color: 0x4a5a6a, roughness: 0.5, metalness: 0.4 });
+const matWire = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.5, roughness: 0.3 });
+const matBush = new THREE.MeshStandardMaterial({ color: 0x4a9e5c, roughness: 0.8 });
+const matBushDark = new THREE.MeshStandardMaterial({ color: 0x3a8a4c, roughness: 0.8 });
+const matCoin = new THREE.MeshStandardMaterial({ color: 0xffdd44, emissive: 0xffcc00, emissiveIntensity: 1.0, metalness: 0.85, roughness: 0.1 });
+const matCoinGlow = new THREE.MeshBasicMaterial({ color: 0xffaa44, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+const matObstacle = new THREE.MeshStandardMaterial({ color: 0xff5533, roughness: 0.45, metalness: 0.2, emissive: 0xff3300, emissiveIntensity: 0.15 });
+const matTrain = new THREE.MeshStandardMaterial({ color: 0xcc4444, roughness: 0.5, metalness: 0.3 });
+const matTrainDark = new THREE.MeshStandardMaterial({ color: 0x993333, roughness: 0.6 });
+const matTrainLight = new THREE.MeshStandardMaterial({ color: 0xffcc88, emissive: 0xffaa44, emissiveIntensity: 0.2 });
+const matPlayer = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.3, metalness: 0.2 });
+const matPlayerDark = new THREE.MeshStandardMaterial({ color: 0x3377dd, roughness: 0.4 });
+const matBuilding = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 0.75, metalness: 0.05 });
+const matWindow = new THREE.MeshStandardMaterial({ color: 0xccddff, emissive: 0x445577, emissiveIntensity: 0.3 });
+const matWindowDark = new THREE.MeshStandardMaterial({ color: 0x223344, emissive: 0x000000, emissiveIntensity: 0 });
+const matGround = new THREE.MeshStandardMaterial({ color: 0x2a3a2a, roughness: 0.9 });
+
+// ============================================================
+// Ground (under the track)
+// ============================================================
+const groundGeo = new THREE.PlaneGeometry(200, 400);
+const ground = new THREE.Mesh(groundGeo, matGround);
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, -0.3, 60);
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ============================================================
+// Buildings (global - generated once)
+// ============================================================
+const buildingColors = [0x8a7a6a, 0x9a8a7a, 0x7a6a5a, 0xaa9a8a, 0x6a7a8a, 0x8a9a7a];
+
+function initBuildings() {
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < CFG.TOTAL_BUILDINGS; i++) {
+      const bHeight = 6 + Math.random() * 14;
+      const bWidth = 2.5 + Math.random() * 5;
+      const bDepth = 4 + Math.random() * 8;
+      const bZ = i * CFG.BUILDING_DIST + Math.random() * 20 - 20;
+      const color = buildingColors[Math.floor(Math.random() * buildingColors.length)];
+      const matB = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05 });
+
+      const build = new THREE.Mesh(new THREE.BoxGeometry(bWidth, bHeight, bDepth), matB);
+      const xOff = CFG.WALL_DISTANCE + 1.5 + bWidth / 2 + Math.random() * 3;
+      build.position.set(side * xOff, bHeight / 2, bZ);
+      build.castShadow = true;
+      build.receiveShadow = true;
+      scene.add(build);
+      state.buildings.push(build);
+
+      // Windows
+      for (let wy = 1.5; wy < bHeight - 1; wy += 2.2) {
+        for (let wx = -bWidth / 2 + 0.8; wx <= bWidth / 2 - 0.5; wx += 1.8) {
+          const lit = Math.random() < 0.35;
+          const winMat = new THREE.MeshStandardMaterial({
+            color: lit ? 0xccddff : 0x223344,
+            emissive: lit ? 0x445577 : 0x000000,
+            emissiveIntensity: lit ? 0.3 : 0,
+          });
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.08), winMat);
+          win.position.set(
+            build.position.x + wx * (side > 0 ? 1 : -1),
+            wy,
+            build.position.z
+          );
+          scene.add(win);
+        }
+      }
+    }
+  }
+}
+
+// ============================================================
+// Segment builder
+// ============================================================
+function createSegment(baseZ) {
+  const z = baseZ;
+  const group = new THREE.Group();
+  const cx = getTrackCurveX(z);
+  const cy = getTrackCurveY(z);
+  const angle = getTrackCurveAngle(z);
+
+  // Road base
+  const road = new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE * 2 - 0.4, 0.3, CFG.SEGMENT_LENGTH), matRoad);
+  road.position.set(cx, cy, z);
+  road.receiveShadow = true;
+  road.castShadow = true;
+  group.add(road);
+
+  // Sleepers (rail ties)
+  for (let s = -CFG.SEGMENT_LENGTH / 2 + 1; s < CFG.SEGMENT_LENGTH / 2; s += 2.5) {
+    const sleeper = new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE * 1.2, 0.1, 0.25), matSleeper);
+    sleeper.position.set(cx, cy + 0.15, z + s);
+    sleeper.receiveShadow = true;
+    group.add(sleeper);
+  }
+
+  // Rails (3 lines)
+  for (let l = -1; l <= 1; l++) {
+    const rX = getLaneX(l + 1);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, CFG.SEGMENT_LENGTH), matRail);
+    rail.position.set(cx + rX, cy + 0.2, z);
+    group.add(rail);
+  }
+
+  // Side walls (red-orange corridor)
+  for (let side = -1; side <= 1; side += 2) {
+    const wallX = side * CFG.WALL_DISTANCE;
+
+    // Main wall panels
+    for (let p = 0; p < Math.ceil(CFG.WALL_HEIGHT / CFG.PANEL_HEIGHT); p++) {
+      const pH = Math.min(CFG.PANEL_HEIGHT, CFG.WALL_HEIGHT - p * CFG.PANEL_HEIGHT);
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(CFG.WALL_THICKNESS, pH, CFG.SEGMENT_LENGTH),
+        p % 2 === 0 ? matWall : matWallDark
+      );
+      panel.position.set(wallX, p * CFG.PANEL_HEIGHT + pH / 2 + cy, z);
+      panel.rotation.z = side * 0.04; // slight inward lean
+      panel.receiveShadow = true;
+      panel.castShadow = true;
+      group.add(panel);
+    }
+
+    // Vertical frames
+    for (let f = -2; f <= 2; f++) {
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, CFG.WALL_HEIGHT + 0.5, 0.15),
+        matFrame
+      );
+      frame.position.set(wallX + side * 0.35, CFG.WALL_HEIGHT / 2 + cy, z + f * CFG.SEGMENT_LENGTH * 0.2);
+      group.add(frame);
+    }
+
+    // Wall top trim
+    const trim = new THREE.Mesh(
+      new THREE.BoxGeometry(CFG.WALL_THICKNESS + 0.4, 0.2, CFG.SEGMENT_LENGTH),
+      matFrame
+    );
+    trim.position.set(wallX, CFG.WALL_HEIGHT + cy, z);
+    group.add(trim);
+
+    // Bushes on top of walls
+    for (let b = 0; b < 3; b++) {
+      // Main bush
+      const bushMat = Math.random() < 0.5 ? matBush : matBushDark;
+      const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 1), bushMat);
+      bush.position.set(
+        wallX + side * Math.random() * 0.4,
+        CFG.WALL_HEIGHT + 0.1 + Math.random() * 0.5,
+        z + (b - 1) * CFG.SEGMENT_LENGTH * 0.3
+      );
+      bush.scale.setScalar(0.7 + Math.random() * 0.6);
+      group.add(bush);
+
+      // Companion bush
+      const bush2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), bushMat);
+      bush2.position.set(
+        wallX + side * 0.5,
+        CFG.WALL_HEIGHT - 0.1,
+        z + (b - 1) * CFG.SEGMENT_LENGTH * 0.3 + 0.4
+      );
+      bush2.scale.setScalar(0.6 + Math.random() * 0.4);
+      group.add(bush2);
+    }
+  }
+
+  // Overhead roof frames
+  for (let r = -1; r <= 1; r++) {
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(CFG.WALL_DISTANCE * 2 + 1, 0.2, CFG.SEGMENT_LENGTH * 0.4),
+      matRoof
+    );
+    roof.position.set(cx, CFG.WALL_HEIGHT + 2.5 + cy, z + r * CFG.SEGMENT_LENGTH * 0.25);
+    group.add(roof);
+  }
+
+  // Support poles
+  for (let side = -1; side <= 1; side += 2) {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.15, CFG.WALL_HEIGHT + 2, 6),
+      matFrame
+    );
+    pole.position.set(side * CFG.WALL_DISTANCE * 0.85, (CFG.WALL_HEIGHT + 2) / 2 + cy, z);
+    group.add(pole);
+
+    // Hanging wire between poles (CatmullRom sag)
+    const wirePts = [
+      new THREE.Vector3(side * CFG.WALL_DISTANCE * 0.85, CFG.WALL_HEIGHT + 0.8, z - 1),
+      new THREE.Vector3(0, CFG.WALL_HEIGHT - 0.5, z + 1.5),
+      new THREE.Vector3(-side * CFG.WALL_DISTANCE * 0.85, CFG.WALL_HEIGHT + 0.8, z + 3),
+    ];
+    const wireCurve = new THREE.CatmullRomCurve3(wirePts);
+    const wire = new THREE.Mesh(new THREE.TubeGeometry(wireCurve, 8, 0.04, 4, false), matWire);
+    group.add(wire);
+  }
+
+  // Rotate segment by curve angle
+  group.position.set(cx, cy, z);
+  group.rotation.y = angle;
+
+  return group;
+}
+
+// ============================================================
+// Coins
+// ============================================================
+function createCoin(lane, z) {
+  const lx = getLaneX(lane);
+  const cx = getTrackCurveX(z);
+  const cy = getTrackCurveY(z);
+  const angle = getTrackCurveAngle(z);
+
+  const coinGroup = new THREE.Group();
+
+  // Coin body
+  const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 12), matCoin);
+  coin.rotation.x = Math.PI / 2;
+  coin.position.y = 1.2 + cy + Math.sin(z * 0.3) * 0.5;
+  coin.castShadow = true;
+  coinGroup.add(coin);
+
+  // Glow ring
+  const glow = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.65, 12), matCoinGlow);
+  glow.rotation.x = Math.PI / 2;
+  glow.position.y = coin.position.y;
+  glow.position.z = -0.05;
+  coinGroup.add(glow);
+
+  // Position
+  coinGroup.position.set(cx + lx, 0, z);
+  coinGroup.rotation.y = angle;
+
+  scene.add(coinGroup);
+  return coinGroup;
+}
+
+// ============================================================
+// Obstacles (trains and barriers)
+// ============================================================
+function createObstacle(type, lane, z) {
+  const lx = getLaneX(lane);
+  const cx = getTrackCurveX(z);
+  const cy = getTrackCurveY(z);
+  const angle = getTrackCurveAngle(z);
+  const group = new THREE.Group();
+
+  if (type === 'train') {
+    // Train body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.5, 4), matTrain);
+    body.position.y = 1.5 + cy;
+    body.castShadow = true;
+    group.add(body);
+
+    // Train roof
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 3.8), matTrainDark);
+    roof.position.y = 2.8 + cy;
+    group.add(roof);
+
+    // Windows
+    for (let w = -1.2; w <= 1.2; w += 1.2) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.1), matTrainLight);
+      win.position.set(0, 2.0 + cy, w);
+      group.add(win);
+    }
+
+    // Wheels
+    for (let w = -1.5; w <= 1.5; w += 1.5) {
+      for (let s = -1; s <= 1; s += 2) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.08, 8), matRail);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(s * 0.85, 0.3, w);
+        group.add(wheel);
+      }
+    }
+  } else {
+    // Barrier box
+    const h = type === 'high' ? 3.0 : 0.8;
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.4, h, 1), matObstacle);
+    bar.position.y = h / 2 + cy;
+    bar.castShadow = true;
+    group.add(bar);
+
+    // Warning stripes
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.12, 0.05), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+    stripe.position.set(0, h + 0.1 + cy, 0.5);
+    group.add(stripe);
+  }
+
+  group.position.set(cx + lx, 0, z);
+  group.rotation.y = angle;
+  scene.add(group);
+  return group;
+}
+
+// ============================================================
+// Player
+// ============================================================
+const playerGroup = new THREE.Group();
+
+// Body
+const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.45), matPlayer);
+pBody.position.y = 0.7;
+pBody.castShadow = true;
+playerGroup.add(pBody);
+
+// Head
+const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), matPlayerDark);
+pHead.position.y = 1.35;
+playerGroup.add(pHead);
+
+// Arms
+for (let s = -1; s <= 1; s += 2) {
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.6, 0.12), matPlayerDark);
+  arm.position.set(s * 0.4, 0.8, 0);
+  playerGroup.add(arm);
+}
+
+// Legs
+const legL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.5, 0.15), matPlayerDark);
+legL.position.set(-0.15, 0.25, 0);
+playerGroup.add(legL);
+
+const legR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.5, 0.15), matPlayerDark);
+legR.position.set(0.15, 0.25, 0);
+playerGroup.add(legR);
+
+playerGroup.position.set(0, 0, 0);
+scene.add(playerGroup);
+
+// ============================================================
+// Generation
+// ============================================================
+function generateAhead() {
+  while (state.nextGenerateZ < state.playerZ + CFG.SEGMENTS_AHEAD * CFG.SEGMENT_LENGTH) {
+    const z = state.nextGenerateZ;
+
+    // Road segment
+    const seg = createSegment(z);
+    scene.add(seg);
+    state.segments.push(seg);
+
+    // Coins (skip initial safe zone)
+    if (z > CFG.INITIAL_SAFE_DISTANCE) {
+      for (let l = 0; l < 3; l++) {
+        if (Math.random() < 0.35) {
+          const coin = createCoin(l, z + Math.random() * CFG.SEGMENT_LENGTH - CFG.SEGMENT_LENGTH / 2);
+          state.coinMeshes.push(coin);
+        }
+      }
+      // Coin arc across lanes
+      if (Math.random() < 0.3) {
+        for (let l = 0; l < 3; l++) {
+          const coin = createCoin(l, z + Math.random() * 4 - 2);
+          state.coinMeshes.push(coin);
+        }
+      }
+    }
+
+    // Obstacles (skip initial safe zone)
+    if (z > CFG.INITIAL_SAFE_DISTANCE && Math.random() < 0.5) {
+      const numObs = Math.random() < 0.3 ? 2 : 1;
+      const usedLanes = [];
+      for (let o = 0; o < numObs; o++) {
+        let lane;
+        do {
+          lane = Math.floor(Math.random() * 3);
+        } while (usedLanes.includes(lane));
+        usedLanes.push(lane);
+
+        const type = lane === state.targetLane
+          ? (Math.random() < 0.4 ? 'high' : 'low')
+          : (Math.random() < 0.3 ? 'train' : 'low');
+
+        const obs = createObstacle(type, lane, z + o * 3);
+        state.obstacles.push({ mesh: obs, z: z + o * 3, lane, type });
+      }
+    }
+
+    state.nextGenerateZ += CFG.SEGMENT_LENGTH;
+  }
+}
+
+function cleanupBehind() {
+  const minZ = state.playerZ - 60;
+
+  // Segments
+  while (state.segments.length > 0) {
+    const seg = state.segments[0];
+    if (!seg) break;
+    // Get Z from position
+    const segPos = new THREE.Vector3();
+    seg.getWorldPosition(segPos);
+    if (segPos.z < minZ) {
+      scene.remove(seg);
+      // Dispose children
+      seg.traverse(child => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      state.segments.shift();
+    } else break;
+  }
+
+  // Obstacles
+  while (state.obstacles.length > 0 && state.obstacles[0].z < minZ) {
+    const o = state.obstacles.shift();
+    scene.remove(o.mesh);
+    o.mesh.traverse(child => {
+      if (child.isMesh) {
+        child.geometry?.dispose();
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material?.dispose();
+      }
+    });
+  }
+
+  // Coins
+  while (state.coinMeshes.length > 0) {
+    const c = state.coinMeshes[0];
+    const cPos = new THREE.Vector3();
+    c.getWorldPosition(cPos);
+    if (cPos.z < minZ) {
+      scene.remove(c);
+      c.traverse(child => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      state.coinMeshes.shift();
+    } else break;
+  }
+}
+
+// ============================================================
+// Collision detection
+// ============================================================
+function checkCollisions() {
+  const pPos = new THREE.Vector3();
+  playerGroup.getWorldPosition(pPos);
+  const px = pPos.x;
+  const pz = pPos.z;
+  const py = pPos.y;
+
+  // Obstacles
+  for (let i = 0; i < state.obstacles.length; i++) {
+    const o = state.obstacles[i];
+    const oPos = new THREE.Vector3();
+    o.mesh.getWorldPosition(oPos);
+    const dz = Math.abs(pz - oPos.z);
+    const dx = Math.abs(px - oPos.x);
+
+    if (dz < 2.0 && dx < 1.2) {
+      // Check if low obstacle and jumping
+      if (o.type === 'low' && py > 1.0) continue; // jumped over
+      if (o.type === 'high' && py > 2.5) continue; // jumped over tall
+      // Train - can't jump over
+      gameOver();
+      return;
+    }
+  }
+
+  // Coins
+  for (let i = state.coinMeshes.length - 1; i >= 0; i--) {
+    const c = state.coinMeshes[i];
+    const cPos = new THREE.Vector3();
+    c.getWorldPosition(cPos);
+    const dz = Math.abs(pz - cPos.z);
+    const dx = Math.abs(px - cPos.x);
+
+    if (dz < 1.2 && dx < 0.8) {
+      scene.remove(c);
+      c.traverse(child => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      state.coinMeshes.splice(i, 1);
+      state.coins++;
+      document.getElementById('hud-coin-count').textContent = state.coins;
+    }
+  }
+}
+
+// ============================================================
+// Game over
+// ============================================================
+function gameOver() {
+  state.gameOver = true;
+  state.running = false;
+  document.getElementById('final-score').textContent = Math.floor(state.score);
+  document.getElementById('final-coins').textContent = state.coins;
+  document.getElementById('gameover').classList.add('show');
+}
+
+// ============================================================
+// Input
+// ============================================================
+const keyQueue = [];
+
+document.addEventListener('keydown', e => {
+  if (!state.running && !state.gameOver) return;
+  if (e.key === 'ArrowLeft') keyQueue.push('left');
+  if (e.key === 'ArrowRight') keyQueue.push('right');
+  if (e.key === 'ArrowUp' || e.key === ' ') keyQueue.push('jump');
+});
+
+function bindTap(el, action) {
+  if (!el) return;
+  let lastTapAt = 0;
+  const handler = e => {
+    if (!state.running) return;
+    const now = performance.now();
+    if (now - lastTapAt < 120) return;
+    lastTapAt = now;
+    e.preventDefault();
+    e.stopPropagation();
+    keyQueue.push(action);
+  };
+  el.addEventListener('touchstart', handler, { passive: false });
+  el.addEventListener('pointerdown', handler, { passive: false });
+  el.addEventListener('mousedown', handler);
+}
+
+bindTap(document.getElementById('zone-left'), 'left');
+bindTap(document.getElementById('zone-jump'), 'jump');
+bindTap(document.getElementById('zone-right'), 'right');
+bindTap(document.getElementById('btn-left'), 'left');
+bindTap(document.getElementById('btn-jump'), 'jump');
+bindTap(document.getElementById('btn-right'), 'right');
+
+// ============================================================
+// Reset
+// ============================================================
+function resetGame() {
+  // Remove everything generated
+  state.segments.forEach(s => scene.remove(s));
+  state.obstacles.forEach(o => scene.remove(o.mesh));
+  state.coinMeshes.forEach(c => scene.remove(c));
+  state.segments = [];
+  state.obstacles = [];
+  state.coinMeshes = [];
+
+  // Reset state
+  state.playerZ = 0;
+  state.playerX = 0;
+  state.targetLane = 1;
+  state.playerY = 0;
+  state.velocityY = 0;
+  state.isJumping = false;
+  state.score = 0;
+  state.coins = 0;
+  state.nextGenerateZ = 0;
+  state.speed = CFG.PLAYER_SPEED;
+  state.gameOver = false;
+  state.running = true;
+
+  // Reset player position
+  playerGroup.position.set(0, 0, 0);
+
+  // Reset camera
+  camera.position.set(0, CFG.CAMERA_HEIGHT, -CFG.CAMERA_DISTANCE);
+  camera.lookAt(0, 0.8, 12);
+
+  // Reset HUD
+  document.getElementById('hud-score').textContent = '0';
+  document.getElementById('hud-coin-count').textContent = '0';
+  document.getElementById('gameover').classList.remove('show');
+
+  // Generate initial segments
+  generateAhead();
+}
+
+// ============================================================
+// Game loop
+// ============================================================
+let lastTime = 0;
+
+function animate(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  if (state.running && !state.gameOver) {
+    update(dt);
+  }
+
+  // Animate coins (always)
+  state.coinMeshes.forEach(c => {
+    c.children.forEach(child => {
+      if (child.isMesh && child.geometry.type === 'CylinderGeometry') {
+        child.rotation.z += dt * 3;
+      }
+    });
+    c.position.y += Math.sin(time * 0.003 + c.position.z * 0.1) * 0.002;
+  });
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+function update(dt) {
+  // Process input
+  if (keyQueue.length > 0) {
+    const action = keyQueue.shift();
+    if (action === 'left' && state.targetLane > 0) state.targetLane--;
+    if (action === 'right' && state.targetLane < 2) state.targetLane++;
+    if (action === 'jump' && !state.isJumping) {
+      state.velocityY = CFG.JUMP_VELOCITY;
+      state.isJumping = true;
+    }
+  }
+
+  // Move forward
+  state.playerZ += state.speed * dt;
+  state.score += state.speed * dt;
+
+  // Lane switching
+  const targetX = getLaneX(state.targetLane);
+  state.playerX += (targetX - state.playerX) * Math.min(1, CFG.SWITCH_SPEED * dt);
+
+  // Jump physics
+  if (state.isJumping) {
+    state.velocityY += CFG.GRAVITY * dt;
+    state.playerY += state.velocityY * dt;
+    if (state.playerY <= 0) {
+      state.playerY = 0;
+      state.velocityY = 0;
+      state.isJumping = false;
+    }
+  }
+
+  // Track curve
+  const curveX = getTrackCurveX(state.playerZ);
+  const curveY = getTrackCurveY(state.playerZ);
+  const angle = getTrackCurveAngle(state.playerZ);
+
+  // Update player position
+  playerGroup.position.x = curveX + state.playerX;
+  playerGroup.position.y = curveY + state.playerY;
+  playerGroup.position.z = state.playerZ;
+  playerGroup.rotation.y = angle;
+
+  // Camera
+  const camOffset = CFG.CAMERA_DISTANCE;
+  const lookAhead = 14;
+  const camZ = state.playerZ - camOffset;
+  const camX = getTrackCurveX(camZ);
+  const camY = getTrackCurveY(camZ);
+  camera.position.set(
+    camX + state.playerX * 0.3,
+    CFG.CAMERA_HEIGHT + camY,
+    camZ
+  );
+  const lookX = getTrackCurveX(state.playerZ + lookAhead);
+  const lookY = getTrackCurveY(state.playerZ + lookAhead);
+  camera.lookAt(lookX + state.playerX * 0.3, 0.8 + lookY, state.playerZ + lookAhead);
+
+  // Generate & cleanup
+  generateAhead();
+  cleanupBehind();
+
+  // Collisions
+  checkCollisions();
+
+  // Speed up gradually
+  state.speed += 0.05 * dt;
+
+  // Update HUD
+  document.getElementById('hud-score').textContent = Math.floor(state.score);
+}
+
+// ============================================================
+// Start
+// ============================================================
+document.getElementById('start-btn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  initBuildings();
+  resetGame();
+  requestAnimationFrame(animate);
+});
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  resetGame();
+});
+
+// Initial render (static scene)
+function initStatic() {
+  // Show a preview segment
+  const preview = createSegment(10);
+  scene.add(preview);
+  state.segments.push(preview);
+
+  // Build initial segments for preview
+  for (let z = -20; z < 60; z += CFG.SEGMENT_LENGTH) {
+    const seg = createSegment(z);
+    scene.add(seg);
+    state.segments.push(seg);
+  }
+
+  // Some buildings in background
+  initBuildings();
+
+  renderer.render(scene, camera);
+}
+
+initStatic();
+</script>
+</body>
+</html>
