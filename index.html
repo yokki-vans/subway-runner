@@ -859,8 +859,8 @@ function update(dt) {
   // Process input
   if (keyQueue.length > 0) {
     const action = keyQueue.shift();
-    if (action === 'left' && state.targetLane > 0) state.targetLane--;
-    if (action === 'right' && state.targetLane < 2) state.targetLane++;
+    if (action === 'left' && state.targetLane < 2) state.targetLane++;
+    if (action === 'right' && state.targetLane > 0) state.targetLane--;
     if (action === 'jump' && !state.isJumping) {
       state.velocityY = CFG.JUMP_VELOCITY;
       state.isJumping = true;
