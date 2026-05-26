@@ -265,21 +265,21 @@ function createSegment(baseZ){
 
   // Road bed — sand-brown, full width
   const road=new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE*2-0.6,0.35,CFG.SEGMENT_LENGTH),mRoad);
-  road.position.set(cx,cy,z);
+  road.position.set(0,0,0);
   road.receiveShadow=true; road.castShadow=true;
   g.add(road);
 
   // Darker edge strips
   for(let s=-1;s<=1;s+=2){
     const strip=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.36,CFG.SEGMENT_LENGTH),mRoadDark);
-    strip.position.set(cx+s*CFG.WALL_DISTANCE*0.85,cy,z);
+    strip.position.set(s*CFG.WALL_DISTANCE*0.85,0,0);
     g.add(strip);
   }
 
   // Sleepers
   for(let s=-CFG.SEGMENT_LENGTH/2+1;s<CFG.SEGMENT_LENGTH/2;s+=3){
     const sl=new THREE.Mesh(new THREE.BoxGeometry(CFG.LANE_WIDTH*CFG.LANE_COUNT+1.5,0.08,0.3),mSleeper);
-    sl.position.set(cx,cy+0.15,z+s);
+    sl.position.set(0,0.15,s);
     g.add(sl);
   }
 
@@ -287,7 +287,7 @@ function createSegment(baseZ){
   for(let l=0;l<3;l++){
     const rX=getLaneX(l);
     const r=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,CFG.SEGMENT_LENGTH),mRail);
-    r.position.set(cx+rX,cy+0.22,z);
+    r.position.set(rX,0.22,0);
     g.add(r);
   }
 
@@ -301,7 +301,7 @@ function createSegment(baseZ){
       new THREE.BoxGeometry(0.7, CFG.WALL_HEIGHT-1.0, CFG.SEGMENT_LENGTH),
       mWall
     );
-    wallPanel.position.set(wx, (CFG.WALL_HEIGHT-1)/2+cy, z);
+    wallPanel.position.set(wx, (CFG.WALL_HEIGHT-1)/2, 0);
     wallPanel.rotation.z=lean;
     wallPanel.receiveShadow=true; wallPanel.castShadow=true;
     g.add(wallPanel);
@@ -311,20 +311,19 @@ function createSegment(baseZ){
       new THREE.BoxGeometry(0.85, 0.8, CFG.SEGMENT_LENGTH),
       mWallTop
     );
-    topBand.position.set(wx, CFG.WALL_HEIGHT-0.6+cy, z);
+    topBand.position.set(wx, CFG.WALL_HEIGHT-0.6, 0);
     topBand.rotation.z=lean;
     g.add(topBand);
 
     // === GREEN HEDGE on top (Subway Surfers) ===
     for(let bh=0; bh<2; bh++){
       const hm=bh%2===0?mHedge:mHedgeD;
-      // Continuous row: use boxes overlapping
       for(let bx=-2;bx<=2;bx++){
         const bush=new THREE.Mesh(new THREE.IcosahedronGeometry(0.6,1),hm);
         bush.position.set(
           wx+side*Math.random()*0.3,
-          CFG.WALL_HEIGHT-0.2+Math.random()*0.6+cy,
-          z+bx*CFG.SEGMENT_LENGTH*0.2+Math.random()*0.5
+          CFG.WALL_HEIGHT-0.2+Math.random()*0.6,
+          bx*CFG.SEGMENT_LENGTH*0.2+Math.random()*0.5
         );
         bush.scale.setScalar(0.8+Math.random()*0.5);
         g.add(bush);
