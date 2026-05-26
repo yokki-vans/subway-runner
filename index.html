@@ -127,9 +127,10 @@ const CFG = {
 const state = {
   running:false, gameOver:false, score:0, coins:0,
   playerZ:0, playerX:0, targetLane:1,
-  playerY:0, velocityY:0, isJumping:false,
+playerY:0, velocityY:0, isJumping:false, lastLand:0,
   nextGenerateZ:0, segments:[], obstacles:[], coinMeshes:[],
-  speed:CFG.PLAYER_SPEED, buildings:[]
+  speed:CFG.PLAYER_SPEED, buildings:[],
+  runPhase:0, wasJumping:false,
 };
 
 // ============================================================
@@ -399,26 +400,59 @@ function createObstacle(type,lane,z){
 }
 
 // ============================================================
-// Player — larger
+// Sound system (Web Audio API — procedural, no files)
+// ============================================================
+let audioCtx=null;
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
+function playTone(freq,dur,type='square',vol=0.15){
+  try{
+    initAudio();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,audioCtx.currentTime);
+    g.gain.setValueAtTime(vol,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+function playCoinSound(){playTone(880,0.08,'square',0.12);setTimeout(()=>playTone(1320,0.12,'square',0.08),50);}
+function playJumpSound(){playTone(300,0.15,'sine',0.1);setTimeout(()=>playTone(500,0.1,'sine',0.06),80);}
+function playLandSound(){playTone(150,0.1,'triangle',0.08);}
+function playGameOverSound(){playTone(400,0.15,'sawtooth',0.12);setTimeout(()=>playTone(300,0.15,'sawtooth',0.1),150);setTimeout(()=>playTone(200,0.3,'sawtooth',0.08),300);}
+function playHitSound(){playTone(200,0.2,'sawtooth',0.15);}
+
+// ============================================================
+// Player — larger, with pivot-based animation rig
 // ============================================================
 const playerGroup=new THREE.Group();
+const playerVisual=new THREE.Group(); // separate visual root for lean/anim
+playerGroup.add(playerVisual);
 const SCALE=1.5;
 
+// Torso
 const pBody=new THREE.Mesh(new THREE.BoxGeometry(0.6*SCALE,0.9*SCALE,0.4*SCALE),mPlayer);
 pBody.position.y=0.7*SCALE;
-pBody.castShadow=true; playerGroup.add(pBody);
+pBody.castShadow=true; playerVisual.add(pBody);
 
+// Head
 const pHead=new THREE.Mesh(new THREE.SphereGeometry(0.25*SCALE,8,8),mPlayerD);
-pHead.position.y=1.35*SCALE; playerGroup.add(pHead);
+pHead.position.y=1.35*SCALE; playerVisual.add(pHead);
 
-for(let s=-1;s<=1;s+=2){
-  const arm=new THREE.Mesh(new THREE.BoxGeometry(0.1*SCALE,0.55*SCALE,0.1*SCALE),mPlayerD);
-  arm.position.set(s*0.4*SCALE,0.8*SCALE,0); playerGroup.add(arm);
-}
+// Arm pivots (shoulder)
+const armPivotL=new THREE.Group(); armPivotL.position.set(-0.38*SCALE,1.05*SCALE,0); playerVisual.add(armPivotL);
+const armPivotR=new THREE.Group(); armPivotR.position.set(0.38*SCALE,1.05*SCALE,0); playerVisual.add(armPivotR);
+const armL=new THREE.Mesh(new THREE.BoxGeometry(0.1*SCALE,0.55*SCALE,0.1*SCALE),mPlayerD);
+armL.position.set(0,-0.275*SCALE,0); armPivotL.add(armL);
+const armR=new THREE.Mesh(new THREE.BoxGeometry(0.1*SCALE,0.55*SCALE,0.1*SCALE),mPlayerD);
+armR.position.set(0,-0.275*SCALE,0); armPivotR.add(armR);
+
+// Leg pivots (hip)
+const legPivotL=new THREE.Group(); legPivotL.position.set(-0.15*SCALE,0.5*SCALE,0); playerVisual.add(legPivotL);
+const legPivotR=new THREE.Group(); legPivotR.position.set(0.15*SCALE,0.5*SCALE,0); playerVisual.add(legPivotR);
 const legL=new THREE.Mesh(new THREE.BoxGeometry(0.14*SCALE,0.5*SCALE,0.14*SCALE),mPlayerD);
-legL.position.set(-0.15*SCALE,0.25*SCALE,0); playerGroup.add(legL);
+legL.position.set(0,-0.25*SCALE,0); legPivotL.add(legL);
 const legR=new THREE.Mesh(new THREE.BoxGeometry(0.14*SCALE,0.5*SCALE,0.14*SCALE),mPlayerD);
-legR.position.set(0.15*SCALE,0.25*SCALE,0); playerGroup.add(legR);
+legR.position.set(0,-0.25*SCALE,0); legPivotR.add(legR);
 
 scene.add(playerGroup);
 
@@ -515,6 +549,7 @@ function checkCollisions(){
       c.traverse(ch=>{if(ch.isMesh){ch.geometry?.dispose();if(Array.isArray(ch.material))ch.material.forEach(m=>m.dispose());else ch.material?.dispose();}});
       state.coinMeshes.splice(i,1);
       state.coins++;
+      playCoinSound();
       document.getElementById('hud-coin-count').textContent=state.coins;
     }
   }
@@ -522,6 +557,7 @@ function checkCollisions(){
 
 function gameOver(){
   state.gameOver=true; state.running=false;
+  playGameOverSound();
   document.getElementById('final-score').textContent=Math.floor(state.score);
   document.getElementById('final-coins').textContent=state.coins;
   document.getElementById('gameover').classList.add('show');
@@ -570,11 +606,16 @@ function resetGame(){
 
   state.playerZ=0; state.playerX=0; state.targetLane=1;
   state.playerY=0; state.velocityY=0; state.isJumping=false;
+  state.runPhase=0; state.wasJumping=false;
   state.score=0; state.coins=0; state.nextGenerateZ=0;
   state.speed=CFG.PLAYER_SPEED;
   state.gameOver=false; state.running=true;
 
   playerGroup.position.set(0,0,0);
+  playerVisual.rotation.set(0,0,0);
+  playerVisual.position.set(0,0,0);
+  legPivotL.rotation.x=0; legPivotR.rotation.x=0;
+  armPivotL.rotation.x=0; armPivotR.rotation.x=0;
   camera.position.set(0,CFG.CAMERA_HEIGHT,-CFG.CAMERA_DISTANCE);
   camera.lookAt(0,0.5,10);
 
@@ -607,23 +648,29 @@ function animate(time){
 }
 
 function update(dt){
+  // Input sounds
   if(keyQueue.length>0){
     const a=keyQueue.shift();
     if(a==='left'&&state.targetLane<2) state.targetLane++;
     if(a==='right'&&state.targetLane>0) state.targetLane--;
-    if(a==='jump'&&!state.isJumping){state.velocityY=CFG.JUMP_VELOCITY;state.isJumping=true;}
+    if(a==='jump'&&!state.isJumping){state.velocityY=CFG.JUMP_VELOCITY;state.isJumping=true;playJumpSound();}
   }
 
   state.playerZ+=state.speed*dt;
   state.score+=state.speed*dt;
 
   const targetX=getLaneX(state.targetLane);
+  const prevX=state.playerX;
   state.playerX+=(targetX-state.playerX)*Math.min(1,CFG.SWITCH_SPEED*dt);
 
+  // Jump physics
   if(state.isJumping){
     state.velocityY+=CFG.GRAVITY*dt;
     state.playerY+=state.velocityY*dt;
-    if(state.playerY<=0){state.playerY=0;state.velocityY=0;state.isJumping=false;}
+    if(state.playerY<=0){
+      state.playerY=0;state.velocityY=0;state.isJumping=false;
+      playLandSound();
+    }
   }
 
   const {x:cx, y:cy, angle}=trackCurve(state.playerZ);
@@ -633,7 +680,39 @@ function update(dt){
   playerGroup.position.z=state.playerZ;
   playerGroup.rotation.y=angle;
 
-  // Camera — lower, tighter behind
+  // === ANIMATIONS ===
+  const speedRatio=state.speed/CFG.PLAYER_SPEED;
+  state.runPhase+=dt*8*speedRatio;
+
+  // Run cycle — legs swing
+  const runAngle=Math.sin(state.runPhase)*0.6;
+  legPivotL.rotation.x=runAngle;
+  legPivotR.rotation.x=-runAngle;
+
+  // Arms swing opposite to legs
+  armPivotL.rotation.x=-runAngle*0.7;
+  armPivotR.rotation.x=runAngle*0.7;
+
+  // Jump animation — arms up, legs tucked
+  if(state.isJumping){
+    const jt=Math.min(state.playerY/2,1);
+    armPivotL.rotation.x=-0.8*jt;
+    armPivotR.rotation.x=-0.8*jt;
+    legPivotL.rotation.x=0.3*jt;
+    legPivotR.rotation.x=0.3*jt;
+  }
+
+  // Lane switch lean
+  const leanTarget=(targetX-state.playerX)*0.6;
+  playerVisual.rotation.z+=(leanTarget-playerVisual.rotation.z)*Math.min(1,8*dt);
+  // Body bounce
+  const bounce=Math.abs(Math.sin(state.runPhase))*0.04;
+  playerVisual.position.y=bounce+(state.isJumping?state.playerY*0.3:0);
+
+  // Track wasJumping for landing detection
+  state.wasJumping=state.isJumping;
+
+  // Camera
   const camZ=state.playerZ-CFG.CAMERA_DISTANCE;
   const {x:camX, y:camY}=trackCurve(camZ);
   camera.position.set(camX+state.playerX*0.3, CFG.CAMERA_HEIGHT+camY, camZ);
