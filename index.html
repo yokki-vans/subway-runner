@@ -303,13 +303,16 @@ function createSegment(baseZ){
     g.add(sl);
   }
 
-  // Rails (3 lines)
+  // Rails (3 lines) — дробим на короткие секции, чтобы сходились без швов на поворотах
+  const RAIL_STEP = 1.2;
   for(let l=0;l<3;l++){
     const rX=getLaneX(l);
-    const railGeo = bendGeometryLocal(new THREE.BoxGeometry(0.1,0.12,L), 0, 0.02);
-    const r=new THREE.Mesh(railGeo,mRail);
-    r.position.set(rX,0.22,0);
-    g.add(r);
+    for(let rz = -L/2 + RAIL_STEP/2; rz <= L/2 - RAIL_STEP/2; rz += RAIL_STEP){
+      const railGeo = bendGeometryLocal(new THREE.BoxGeometry(0.1,0.12,RAIL_STEP + 0.18), 0, 0.008);
+      const r=new THREE.Mesh(railGeo,mRail);
+      r.position.set(rX,0.22,rz);
+      g.add(r);
+    }
   }
 
   // === SOLID SLANTED WALLS ===
