@@ -99,7 +99,7 @@ const CFG = {
   CURVE_FREQ: 0.025,
   CURVE_AMP: 4.0,
   CURVE_Y_FREQ: 0.015,
-  CURVE_Y_AMP: 0.5,
+  CURVE_Y_AMP: 0.2,
 
   // Player
   PLAYER_SPEED: 16,
@@ -194,6 +194,21 @@ function trackCurve(z){
 
 function getLaneX(lane){ return (lane-1)*CFG.LANE_WIDTH; }
 
+function bendGeometryLocal(geo, bendX=0, bendY=0){
+  const pos = geo.attributes.position;
+  const halfL = geo.parameters?.depth ? geo.parameters.depth / 2 : CFG.SEGMENT_LENGTH / 2;
+  for(let i=0;i<pos.count;i++){
+    const z = pos.getZ(i);
+    const t = halfL !== 0 ? Math.max(-1, Math.min(1, z / halfL)) : 0;
+    const k = 1 - t*t; // 0 на краях, 1 в центре
+    if(bendX) pos.setX(i, pos.getX(i) + bendX * k);
+    if(bendY) pos.setY(i, pos.getY(i) + bendY * k);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 // ============================================================
 // Materials — warm palette
 // ============================================================
@@ -263,18 +278,20 @@ function createSegment(baseZ){
   const z=baseZ;
   const {x:cx, y:cy, angle}=trackCurve(z);
   const g=new THREE.Group();
-  const SEGMENT_OVERLAP = 0.9; // скрываем стыки между сегментами
+  const SEGMENT_OVERLAP = 2.2; // сильнее перекрываем стыки
   const L = CFG.SEGMENT_LENGTH + SEGMENT_OVERLAP;
 
   // Road bed — sand-brown, full width
-  const road=new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE*2-0.6,0.35,L),mRoad);
+  const roadGeo = bendGeometryLocal(new THREE.BoxGeometry(CFG.WALL_DISTANCE*2-0.6,0.35,L), 0, 0.08);
+  const road=new THREE.Mesh(roadGeo,mRoad);
   road.position.set(0,0,0);
   road.receiveShadow=true; road.castShadow=true;
   g.add(road);
 
   // Darker edge strips
   for(let s=-1;s<=1;s+=2){
-    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.36,L),mRoadDark);
+    const stripGeo = bendGeometryLocal(new THREE.BoxGeometry(0.6,0.36,L), 0, 0.04);
+    const strip=new THREE.Mesh(stripGeo,mRoadDark);
     strip.position.set(s*CFG.WALL_DISTANCE*0.85,0,0);
     g.add(strip);
   }
@@ -289,7 +306,8 @@ function createSegment(baseZ){
   // Rails (3 lines)
   for(let l=0;l<3;l++){
     const rX=getLaneX(l);
-    const r=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,L),mRail);
+    const railGeo = bendGeometryLocal(new THREE.BoxGeometry(0.1,0.12,L), 0, 0.02);
+    const r=new THREE.Mesh(railGeo,mRail);
     r.position.set(rX,0.22,0);
     g.add(r);
   }
@@ -300,8 +318,13 @@ function createSegment(baseZ){
     const lean=side*0.06;
 
     // Main wall — single solid panel
-    const wallPanel=new THREE.Mesh(
+    const wallGeo = bendGeometryLocal(
       new THREE.BoxGeometry(0.7, CFG.WALL_HEIGHT-1.0, L),
+      side * 0.05,
+      0
+    );
+    const wallPanel=new THREE.Mesh(
+      wallGeo,
       mWall
     );
     wallPanel.position.set(wx, (CFG.WALL_HEIGHT-1)/2, 0);
@@ -310,8 +333,13 @@ function createSegment(baseZ){
     g.add(wallPanel);
 
     // Upper wall band
-    const topBand=new THREE.Mesh(
+    const topBandGeo = bendGeometryLocal(
       new THREE.BoxGeometry(0.85, 0.8, L),
+      side * 0.04,
+      0
+    );
+    const topBand=new THREE.Mesh(
+      topBandGeo,
       mWallTop
     );
     topBand.position.set(wx, CFG.WALL_HEIGHT-0.6, 0);
