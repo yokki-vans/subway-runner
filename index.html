@@ -263,16 +263,18 @@ function createSegment(baseZ){
   const z=baseZ;
   const {x:cx, y:cy, angle}=trackCurve(z);
   const g=new THREE.Group();
+  const SEGMENT_OVERLAP = 0.9; // скрываем стыки между сегментами
+  const L = CFG.SEGMENT_LENGTH + SEGMENT_OVERLAP;
 
   // Road bed — sand-brown, full width
-  const road=new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE*2-0.6,0.35,CFG.SEGMENT_LENGTH),mRoad);
+  const road=new THREE.Mesh(new THREE.BoxGeometry(CFG.WALL_DISTANCE*2-0.6,0.35,L),mRoad);
   road.position.set(0,0,0);
   road.receiveShadow=true; road.castShadow=true;
   g.add(road);
 
   // Darker edge strips
   for(let s=-1;s<=1;s+=2){
-    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.36,CFG.SEGMENT_LENGTH),mRoadDark);
+    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.36,L),mRoadDark);
     strip.position.set(s*CFG.WALL_DISTANCE*0.85,0,0);
     g.add(strip);
   }
@@ -287,7 +289,7 @@ function createSegment(baseZ){
   // Rails (3 lines)
   for(let l=0;l<3;l++){
     const rX=getLaneX(l);
-    const r=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,CFG.SEGMENT_LENGTH),mRail);
+    const r=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,L),mRail);
     r.position.set(rX,0.22,0);
     g.add(r);
   }
@@ -299,7 +301,7 @@ function createSegment(baseZ){
 
     // Main wall — single solid panel
     const wallPanel=new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, CFG.WALL_HEIGHT-1.0, CFG.SEGMENT_LENGTH),
+      new THREE.BoxGeometry(0.7, CFG.WALL_HEIGHT-1.0, L),
       mWall
     );
     wallPanel.position.set(wx, (CFG.WALL_HEIGHT-1)/2, 0);
@@ -309,7 +311,7 @@ function createSegment(baseZ){
 
     // Upper wall band
     const topBand=new THREE.Mesh(
-      new THREE.BoxGeometry(0.85, 0.8, CFG.SEGMENT_LENGTH),
+      new THREE.BoxGeometry(0.85, 0.8, L),
       mWallTop
     );
     topBand.position.set(wx, CFG.WALL_HEIGHT-0.6, 0);
