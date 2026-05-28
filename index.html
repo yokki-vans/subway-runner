@@ -89,17 +89,17 @@ const CFG = {
   // Track — wider lanes, wider corridor
   LANE_WIDTH: 2.4,
   LANE_COUNT: 3,
-  SEGMENT_LENGTH: 12,
-  SEGMENTS_AHEAD: 90,
+  SEGMENT_LENGTH: 6,
+  SEGMENTS_AHEAD: 180,
   WALL_DISTANCE: 7.0,
   WALL_HEIGHT: 8.0,
   WALL_TOP_HEDGE: 0.8,
 
   // Single smooth curve — no double-frequency noise
   CURVE_FREQ: 0.025,
-  CURVE_AMP: 4.0,
+  CURVE_AMP: 2.8,
   CURVE_Y_FREQ: 0.015,
-  CURVE_Y_AMP: 0.2,
+  CURVE_Y_AMP: 0.0,
 
   // Player
   PLAYER_SPEED: 16,
@@ -278,7 +278,7 @@ function createSegment(baseZ){
   const z=baseZ;
   const {x:cx, y:cy, angle}=trackCurve(z);
   const g=new THREE.Group();
-  const SEGMENT_OVERLAP = 2.2; // сильнее перекрываем стыки
+  const SEGMENT_OVERLAP = 4.0; // максимально прячем стыки
   const L = CFG.SEGMENT_LENGTH + SEGMENT_OVERLAP;
 
   // Road bed — sand-brown, full width
@@ -346,20 +346,18 @@ function createSegment(baseZ){
     topBand.rotation.z=lean;
     g.add(topBand);
 
-    // === GREEN HEDGE on top (Subway Surfers) ===
-    for(let bh=0; bh<2; bh++){
-      const hm=bh%2===0?mHedge:mHedgeD;
-      for(let bx=-2;bx<=2;bx++){
-        const bush=new THREE.Mesh(new THREE.IcosahedronGeometry(0.6,1),hm);
-        bush.position.set(
-          wx+side*Math.random()*0.3,
-          CFG.WALL_HEIGHT-0.2+Math.random()*0.6,
-          bx*CFG.SEGMENT_LENGTH*0.2+Math.random()*0.5
-        );
-        bush.scale.setScalar(0.8+Math.random()*0.5);
-        g.add(bush);
-      }
-    }
+    // === GREEN HEDGE on top (continuous strips, no seam noise) ===
+    const hedgeGeoA = bendGeometryLocal(new THREE.BoxGeometry(0.55, 0.45, L), side * 0.03, 0);
+    const hedgeA = new THREE.Mesh(hedgeGeoA, mHedge);
+    hedgeA.position.set(wx + side * 0.18, CFG.WALL_HEIGHT - 0.08, 0);
+    hedgeA.rotation.z = lean;
+    g.add(hedgeA);
+
+    const hedgeGeoB = bendGeometryLocal(new THREE.BoxGeometry(0.35, 0.35, L), side * 0.02, 0);
+    const hedgeB = new THREE.Mesh(hedgeGeoB, mHedgeD);
+    hedgeB.position.set(wx + side * 0.34, CFG.WALL_HEIGHT + 0.18, 0);
+    hedgeB.rotation.z = lean;
+    g.add(hedgeB);
   }
 
   g.position.set(cx,cy,z);
